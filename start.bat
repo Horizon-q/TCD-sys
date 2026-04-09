@@ -16,23 +16,6 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo 3. 初始化数据库...
-echo 3.1 重置数据库...
-call npm run reset-db
-if %errorlevel% neq 0 (
-    echo 数据库重置失败！
-    pause
-    exit /b 1
-)
-
-echo 3.2 导入Excel数据...
-call npm run import-excel
-if %errorlevel% neq 0 (
-    echo Excel数据导入失败！
-    pause
-    exit /b 1
-)
-
 echo 4. 启动前后端服务...
 cd /d %~dp0
 start "前端服务" cmd /k "npm start"
