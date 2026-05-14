@@ -2,6 +2,9 @@
 
 // 模拟数据生成函数
 const generateMockSpectrums = (count = 25) => {
+    const stenosisFlags = ['是', '否', '疑似是'];
+    const stenosisDegrees = ['轻度', '轻中度', '中度', '中重度', '重度', '无明确程度'];
+
     return Array.from({ length: count }, (_, index) => {
         const causeKeys = getRandomSpectrumTypes();
 
@@ -40,6 +43,10 @@ const generateMockSpectrums = (count = 25) => {
             envelope_quality: [1, 4, 7, 10][(index + 1) % 4],
             laminar_flow_status: [1, 4, 7, 10][(index + 2) % 4],
 
+            // 新增：是否狭窄、狭窄程度，保持中文值
+            stenosis_flag: stenosisFlags[index % stenosisFlags.length],
+            stenosis_degree: stenosisDegrees[index % stenosisDegrees.length],
+
             spectrum_quality_remark: 'HAHA',
             otherCause: 'HEHE',
             specialNote: 'HIHI',
@@ -64,7 +71,7 @@ const getRandomSpectrumTypes = () => {
         'other',
         'normal_spectrum',
     ];
-    const count = Math.floor(Math.random() * 3) + 1; // 1-3个类型
+    const count = Math.floor(Math.random() * 3) + 1;
     return allTypes.sort(() => 0.5 - Math.random()).slice(0, count);
 };
 
@@ -123,6 +130,22 @@ const applyFilters = (spectrums, filters) => {
     if (filters.annotationStatus?.length > 0) {
         result = result.filter((spectrum) => {
             return filters.annotationStatus.includes(spectrum.annotationStatus);
+        });
+    }
+
+    // 新增：是否狭窄筛选，保持中文值
+    if (filters.stenosis_flag?.length > 0) {
+        result = result.filter((spectrum) => {
+            if (spectrum.stenosis_flag === undefined || spectrum.stenosis_flag === null) return false;
+            return filters.stenosis_flag.includes(spectrum.stenosis_flag);
+        });
+    }
+
+    // 新增：狭窄程度筛选，保持中文值
+    if (filters.stenosis_degree?.length > 0) {
+        result = result.filter((spectrum) => {
+            if (spectrum.stenosis_degree === undefined || spectrum.stenosis_degree === null) return false;
+            return filters.stenosis_degree.includes(spectrum.stenosis_degree);
         });
     }
 
@@ -201,6 +224,11 @@ const updateAnnotation = (spectrums, imageId, annotationData) => {
 
                 other_cause: annotationData.other_cause ?? spectrum.other_cause,
                 cause_description: annotationData.cause_description ?? spectrum.cause_description,
+
+                // 新增：是否狭窄、狭窄程度，保持中文值
+                stenosis_flag: annotationData.stenosis_flag ?? spectrum.stenosis_flag,
+                stenosis_degree: annotationData.stenosis_degree ?? spectrum.stenosis_degree,
+
                 annotatedAt: annotationData.annotatedAt ?? spectrum.annotatedAt,
             }
             : spectrum
@@ -214,6 +242,10 @@ const getDefaultFilters = () => ({
     genders: [],
     pathologyTypes: [],
     annotationStatus: [1], // 默认只显示未标注的
+
+    // 新增：默认筛选项
+    stenosis_flag: [],
+    stenosis_degree: [],
 
     peak_delay: [],
     round_blunt: [],
@@ -248,6 +280,11 @@ const getDefaultFormData = () => ({
     other: null,
     other_cause: null,
     cause_description: null,
+
+    // 新增：默认表单字段
+    stenosis_flag: null,
+    stenosis_degree: null,
+
     annotationStatus: null,
     annotatedAt: null
 });
@@ -264,6 +301,10 @@ const getDefaultImage = () => ({
     direction: '',
     depth: 0,
     annotation: null,
+
+    // 新增：默认图片字段
+    stenosis_flag: null,
+    stenosis_degree: null,
 });
 
 // API 模拟函数
@@ -285,6 +326,16 @@ const spectrumAPI = {
             }
             if (filters.annotationStatus?.length) {
                 filters.annotationStatus.forEach((item) => queryParams.append('annotationStatusGroup', item));
+            }
+
+            // 新增：是否狭窄筛选参数，保持中文值
+            if (filters.stenosis_flag?.length) {
+                filters.stenosis_flag.forEach((item) => queryParams.append('stenosis_flag', item));
+            }
+
+            // 新增：狭窄程度筛选参数，保持中文值
+            if (filters.stenosis_degree?.length) {
+                filters.stenosis_degree.forEach((item) => queryParams.append('stenosis_degree', item));
             }
 
             CAUSE_FILTER_KEYS.forEach((key) => {
@@ -354,8 +405,19 @@ const spectrumAPI = {
             if (filters.annotationStatus?.length) {
                 filters.annotationStatus.forEach((item) => queryParams.append('annotationStatusGroup', item));
             }
-            if(filters.analysisCheckStatus?.length==1){
+
+            if (filters.analysisCheckStatus?.length === 1) {
                 filters.analysisCheckStatus.forEach((item) => queryParams.append('analysisCheckStatus', item));
+            }
+
+            // 新增：是否狭窄筛选参数，保持中文值
+            if (filters.stenosis_flag?.length) {
+                filters.stenosis_flag.forEach((item) => queryParams.append('stenosis_flag', item));
+            }
+
+            // 新增：狭窄程度筛选参数，保持中文值
+            if (filters.stenosis_degree?.length) {
+                filters.stenosis_degree.forEach((item) => queryParams.append('stenosis_degree', item));
             }
 
             CAUSE_FILTER_KEYS.forEach((key) => {

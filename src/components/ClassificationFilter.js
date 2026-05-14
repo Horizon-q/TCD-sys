@@ -129,6 +129,21 @@ const ClassificationFilter = ({
       { value: 0, label: '未检查' },
     ],
 
+    stenosis_flag: [
+      { value: '是', label: '是' },
+      { value: '否', label: '否' },
+      { value: '疑似是', label: '疑似是' },
+    ],
+
+    stenosis_degree: [
+      { value: '轻度', label: '轻度' },
+      { value: '轻中度', label: '轻中度' },
+      { value: '中度', label: '中度' },
+      { value: '中重度', label: '中重度' },
+      { value: '重度', label: '重度' },
+      { value: '无明确程度', label: '无明确程度' },
+    ],
+
     causeFields: [
       { key: 'peak_delay', label: '峰时延迟频谱' },
       { key: 'round_blunt', label: '圆钝频谱' },
@@ -178,15 +193,21 @@ const ClassificationFilter = ({
 
   const normalizedFilters = useMemo(() => {
     const next = { ...internalFilters };
+
     Object.keys(next).forEach((key) => {
       next[key] = normalizeArrayField(next[key]);
     });
+
     return next;
   }, [internalFilters]);
 
   const selectedCauseValues = useMemo(() => {
     return config.causeFields
-      .filter((item) => Array.isArray(normalizedFilters[item.key]) && normalizedFilters[item.key].length > 0)
+      .filter(
+        (item) =>
+          Array.isArray(normalizedFilters[item.key]) &&
+          normalizedFilters[item.key].length > 0
+      )
       .map((item) => item.key);
   }, [normalizedFilters, config.causeFields]);
 
@@ -205,10 +226,14 @@ const ClassificationFilter = ({
 
     if (filterType === 'annotationStatus') {
       const isNowUnannotated = nextValue.length === 1 && nextValue.includes(1);
+
       if (isNowUnannotated) {
         config.causeFields.forEach((item) => {
           newFilters[item.key] = [];
         });
+
+        // 只隐藏并清空频谱质量/形态相关筛选
+        // 是否狭窄、狭窄程度不再清空，保持始终可筛选
         newFilters.noise_level = [];
         newFilters.envelope_quality = [];
         newFilters.laminar_flow_status = [];
@@ -236,6 +261,7 @@ const ClassificationFilter = ({
 
   const handleReset = () => {
     const resetFilters = {};
+
     Object.keys(normalizedFilters).forEach((key) => {
       resetFilters[key] = [];
     });
@@ -245,6 +271,10 @@ const ClassificationFilter = ({
     resetFilters.genders = [];
     resetFilters.annotationStatus = [];
     resetFilters.analysisCheckStatus = [];
+
+    resetFilters.stenosis_flag = [];
+    resetFilters.stenosis_degree = [];
+
     resetFilters.noise_level = [];
     resetFilters.envelope_quality = [];
     resetFilters.laminar_flow_status = [];
@@ -373,12 +403,35 @@ const ClassificationFilter = ({
 
               <Divider style={{ margin: '8px 0' }} />
 
-              {renderCheckboxFilter('annotationStatus', '标注状态', config.annotationStatus)}
-              {renderCheckboxFilter('analysisCheckStatus', '是否检查分析结果', config.analysisCheckStatus)}
+              {renderCheckboxFilter(
+                'annotationStatus',
+                '标注状态',
+                config.annotationStatus
+              )}
+
+              {renderCheckboxFilter(
+                'analysisCheckStatus',
+                '是否检查分析结果',
+                config.analysisCheckStatus
+              )}
+
+              <Divider style={{ margin: '8px 0' }} />
+
+              {renderCheckboxFilter(
+                'stenosis_flag',
+                '是否狭窄',
+                config.stenosis_flag
+              )}
+
+              {renderSelectFilter(
+                'stenosis_degree',
+                '狭窄程度',
+                config.stenosis_degree
+              )}
 
               {isOnlyUnannotated() && (
                 <InlineHint>
-                  当前仅筛选“未标注”，已自动隐藏标注结果相关筛选项。
+                  当前仅筛选“未标注”，已自动隐藏频谱形态、噪音等级、包络线质量、层流状态等标注质量相关筛选项。
                 </InlineHint>
               )}
 
@@ -387,9 +440,24 @@ const ClassificationFilter = ({
                   <Divider style={{ margin: '8px 0' }} />
 
                   {renderCauseSelectFilter()}
-                  {renderSelectFilter('noise_level', '噪音等级', config.noise_level)}
-                  {renderSelectFilter('envelope_quality', '包络线质量', config.envelope_quality)}
-                  {renderSelectFilter('laminar_flow_status', '层流状态', config.laminar_flow_status)}
+
+                  {renderSelectFilter(
+                    'noise_level',
+                    '噪音等级',
+                    config.noise_level
+                  )}
+
+                  {renderSelectFilter(
+                    'envelope_quality',
+                    '包络线质量',
+                    config.envelope_quality
+                  )}
+
+                  {renderSelectFilter(
+                    'laminar_flow_status',
+                    '层流状态',
+                    config.laminar_flow_status
+                  )}
 
                   <Divider style={{ margin: '8px 0' }} />
                 </>

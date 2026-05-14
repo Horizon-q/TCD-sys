@@ -208,6 +208,12 @@ const AppSider = () => {
                     <strong>方向:</strong> {currentImage.direction === 'U' ? '朝向探头' : '背离探头'}
                   </p>
                   <p style={{ margin: '4px 0' }}>
+                    <strong>是否狭窄:</strong> {currentImage.stenosis_flag == null ? '暂未发现狭窄' : currentImage.stenosis_flag}
+                  </p>
+                  <p style={{ margin: '4px 0' }}>
+                    <strong>狭窄程度:</strong> {currentImage.stenosis_degree == null ? '暂未发现狭窄' : currentImage.stenosis_degree}
+                  </p>
+                  <p style={{ margin: '4px 0' }}>
                     <strong>标注状态:</strong> {utils.getStatusTag(currentImage)}
                   </p>
                 </div>

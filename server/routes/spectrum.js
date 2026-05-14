@@ -20,7 +20,6 @@ const getMultiValueArr = (param) => {
 };
 
 // 判断前端是否“传了这个筛选字段”
-// 只要 queryKey 存在，并且不是 undefined/null/空字符串/空数组，就认为传了
 const hasFilterParam = (param) => {
     if (param === undefined || param === null) return false;
     if (Array.isArray(param)) return param.length > 0;
@@ -33,6 +32,13 @@ const parseZeroOneArr = (param) => {
     return getMultiValueArr(param)
         .map(v => Number(v))
         .filter(v => v === 0 || v === 1);
+};
+
+// 解析中文字符串筛选值，不做数字映射
+const parseChineseStringArr = (param) => {
+    return getMultiValueArr(param)
+        .map(v => String(v).trim())
+        .filter(v => v !== '');
 };
 
 // 获取所有频谱图数据（带分页）
@@ -51,6 +57,10 @@ router.get('/', async (req, res) => {
             laminarFlowStatusGroup,
             searchText,
             analysisCheckStatus,
+
+            // 新增：保持中文值，不映射成数字
+            stenosis_flag,
+            stenosis_degree,
         } = req.query;
 
         console.log('接收的筛选参数:', req.query);
@@ -99,6 +109,8 @@ router.get('/', async (req, res) => {
                 a.other_cause,
                 a.cause_description,
                 a.annotationStatus,
+                a.stenosis_flag,
+                a.stenosis_degree,
                 a.annotatedAt,
                 a.check_tag as analysisCheckStatus
             FROM tcdSnapshot s
@@ -127,10 +139,12 @@ router.get('/', async (req, res) => {
                         p.department LIKE ? OR
                         a.spectrum_quality_remark LIKE ? OR
                         a.other_cause LIKE ? OR
-                        a.cause_description LIKE ?
+                        a.cause_description LIKE ? OR
+                        a.stenosis_flag LIKE ? OR
+                        a.stenosis_degree LIKE ?
                     )
                 `;
-                params.push(...Array(6).fill(searchTerm));
+                params.push(...Array(8).fill(searchTerm));
             }
         }
 
@@ -147,6 +161,7 @@ router.get('/', async (req, res) => {
         if (genderArr.length > 0) {
             const genderMap = { male: 0, female: 1 };
             const dbGenderArr = genderArr.map(g => genderMap[g] ?? g);
+
             baseQuery += ` AND p.patGender IN (${dbGenderArr.map(() => '?').join(',')})`;
             params.push(...dbGenderArr);
         }
@@ -155,6 +170,7 @@ router.get('/', async (req, res) => {
         const ageGroupArr = getMultiValueArr(ageGroup);
         if (ageGroupArr.length > 0) {
             const ageConditions = [];
+
             ageGroupArr.forEach(group => {
                 switch (group) {
                     case 'child':
@@ -173,6 +189,7 @@ router.get('/', async (req, res) => {
                         break;
                 }
             });
+
             if (ageConditions.length > 0) {
                 baseQuery += ` AND (${ageConditions.join(' OR ')})`;
             }
@@ -192,7 +209,7 @@ router.get('/', async (req, res) => {
         }
 
         // 5. 频谱形态筛选
-        // 规则：只要前端传了该 queryKey，就要求数据库对应列 非空 且 != 0
+        // 规则：只要前端传了该 queryKey，就要求数据库对应列非空且 != 0
         const causeConditions = [];
 
         CAUSE_FILTER_CONFIG.forEach(({ queryKey, column }) => {
@@ -244,10 +261,9 @@ router.get('/', async (req, res) => {
             }
         }
 
-        // 9. 分析检查状态筛选（analysisCheckStatus -> tcdAnalysis.check_tag）
-        // 约定：
-        // 1 => 已检查，只查 ta.check_tag = 1
-        // 0 => 未检查，查 ta.check_tag = 0 或 ta.check_tag IS NULL
+        // 9. 分析检查状态筛选
+        // 1 => 已检查
+        // 0 => 未检查
         const analysisCheckStatusArr = parseZeroOneArr(analysisCheckStatus);
 
         if (analysisCheckStatusArr.length > 0) {
@@ -263,7 +279,30 @@ router.get('/', async (req, res) => {
             }
         }
 
+        // 10. 是否狭窄筛选
+        // 注意：这里不做任何数字映射，数据库和前端都使用中文值
+        // 可选值：是、否、疑似是
+        const stenosisFlagArr = parseChineseStringArr(stenosis_flag);
+
+        if (stenosisFlagArr.length > 0) {
+            baseQuery += ` AND a.stenosis_flag IN (${stenosisFlagArr.map(() => '?').join(',')})`;
+            params.push(...stenosisFlagArr);
+        }
+
+        // 11. 狭窄程度筛选
+        // 注意：这里不做任何数字映射，数据库和前端都使用中文值
+        // 可选值：轻度、轻中度、中度、中重度、重度、无明确程度
+        const stenosisDegreeArr = parseChineseStringArr(stenosis_degree);
+
+        if (stenosisDegreeArr.length > 0) {
+            baseQuery += ` AND a.stenosis_degree IN (${stenosisDegreeArr.map(() => '?').join(',')})`;
+            params.push(...stenosisDegreeArr);
+        }
+
         const countQuery = `SELECT COUNT(*) as total FROM (${baseQuery}) AS subquery`;
+
+        console.log("进行查询的参数为：", params)
+
         const countResult = await db.get(countQuery, [...params]);
         let total = countResult ? countResult.total : 0;
 
@@ -346,6 +385,11 @@ router.get('/', async (req, res) => {
                 turbulence: spectrum.turbulence,
                 other_cause: spectrum.other_cause,
                 cause_description: spectrum.cause_description,
+
+                // 新增返回字段：保持中文
+                stenosis_flag: spectrum.stenosis_flag,
+                stenosis_degree: spectrum.stenosis_degree,
+
                 annotatedAt: spectrum.annotatedAt,
                 analysisCheckStatus: spectrum.analysisCheckStatus
             };
@@ -437,6 +481,7 @@ router.get('/debug/relationships', async (req, res) => {
         ];
 
         const results = {};
+
         for (let i = 0; i < testQueries.length; i++) {
             try {
                 const result = await db.query(testQueries[i]);
@@ -474,9 +519,15 @@ router.get('/:id', async (req, res) => {
         const query = `
             SELECT 
                 s.*,
-                p.patName, p.patGender, p.age, p.department
+                p.patName,
+                p.patGender,
+                p.age,
+                p.department,
+                a.stenosis_flag,
+                a.stenosis_degree
             FROM tcdSnapshot s
             LEFT JOIN tcdPatient p ON s.patId = p.patId
+            LEFT JOIN tcdAnnotations a ON s.snpId = a.snpId
             WHERE s.snpId = ?
         `;
 
@@ -500,7 +551,11 @@ router.get('/:id', async (req, res) => {
             vessel: spectrum.snpVessel,
             direction: spectrum.snpDirection,
             peakVelocity: spectrum.snpPeak,
-            diastolicVelocity: spectrum.snpDias
+            diastolicVelocity: spectrum.snpDias,
+
+            // 新增详情字段：保持中文
+            stenosis_flag: spectrum.stenosis_flag,
+            stenosis_degree: spectrum.stenosis_degree
         };
 
         res.json({
@@ -549,23 +604,25 @@ router.post('/:id/annotations', async (req, res) => {
 
         const result = await db.run(`
             UPDATE tcdAnnotations SET 
-            noise_level = ?, 
-            envelope_quality = ?, 
-            laminar_flow_status = ?,
-            spectrum_quality_remark = ?,
-            abnormal_spectrum = ?,
-            normal_spectrum = ?,
-            peak_delay = ?,
-            round_blunt = ?,
-            high_resistance = ?,
-            low_resistance = ?,
-            steal_blood = ?,
-            vortex = ?,
-            turbulence = ?,
-            other_cause = ?,
-            cause_description = ?,
-            annotationStatus = ?,
-            annotatedAt = datetime('now')
+                noise_level = ?, 
+                envelope_quality = ?, 
+                laminar_flow_status = ?,
+                spectrum_quality_remark = ?,
+                abnormal_spectrum = ?,
+                normal_spectrum = ?,
+                peak_delay = ?,
+                round_blunt = ?,
+                high_resistance = ?,
+                low_resistance = ?,
+                steal_blood = ?,
+                vortex = ?,
+                turbulence = ?,
+                other_cause = ?,
+                cause_description = ?,
+                stenosis_flag = ?,
+                stenosis_degree = ?,
+                annotationStatus = ?,
+                annotatedAt = datetime('now')
             WHERE snpId = ?
         `, [
             annotationData.noise_level,
@@ -583,6 +640,14 @@ router.post('/:id/annotations', async (req, res) => {
             annotationData.turbulence,
             annotationData.other_cause,
             annotationData.cause_description,
+
+            // 保存时也保持中文，不做数字映射
+            // stenosis_flag: 是 / 否 / 疑似是
+            annotationData.stenosis_flag,
+
+            // stenosis_degree: 轻度 / 轻中度 / 中度 / 中重度 / 重度 / 无明确程度
+            annotationData.stenosis_degree,
+
             2,
             id
         ]);
